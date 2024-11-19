@@ -20,7 +20,8 @@ API_ID = "26490815"  # Replace with your actual API ID
 API_HASH = "b99d8504b8812f9ec395ec61c010ac32"  # Replace with your actual API Hash
 BOT_TOKEN = "7060430437:AAH6NkmJ17Q09fXf6dPzM2ykmo7b8xDW5TQ"  # Replace with your bot token
 
-YT_COOKIES_PATH = "C:\\Users\\saura\\OneDrive\\Desktop\\ai Bots\\cookies.txt"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Directory of main.py
+YT_COOKIES_PATH = os.path.join(BASE_DIR, "cookies.txt")  # cookies.txt in the same folder
 
 # Initialize the Pyrogram client
 bot = Client(

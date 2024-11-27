@@ -115,7 +115,7 @@ Robust error management including:
 ## Contact
 
 - Telegram: https://t.me/hmm_Smokie
-- GitHub: [Your GitHub Profile](https://github.com/yourusername)
+- GitHub: [(https://github.com/thefinegraphicsroom)]
 
 ---
 

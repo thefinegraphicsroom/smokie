@@ -3,14 +3,19 @@ from pyrogram.types import (
     InlineKeyboardMarkup, 
     InlineKeyboardButton,
     ChatJoinRequest,
-    Message
+    Message,
+    ChatPrivileges
 )
 from pyrogram.errors import (
+    UserNotParticipant, 
+    ChatAdminRequired, 
     FloodWait, 
+    InputUserDeactivated, 
     UserIsBlocked, 
-    PeerIdInvalid
+    PeerIdInvalid, 
+    ChatWriteForbidden
 )
-from pyrogram.enums import ChatType
+from pyrogram.enums import ChatType, ChatMemberStatus
 import asyncio
 import random
 from datetime import datetime

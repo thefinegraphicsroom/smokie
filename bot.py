@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Initialize bot with your credentials
 app = Client(
     "auto_approver_bot",
-    mongo_uri = os.environ.get("MONGO_URI")
+    mongo_uri = os.environ.get("MONGO_URI"),
     api_id=os.environ.get("TELEGRAM_API_ID"),
     api_hash=os.environ.get("TELEGRAM_API_HASH"),
     bot_token=os.environ.get("TELEGRAM_BOT_TOKEN")

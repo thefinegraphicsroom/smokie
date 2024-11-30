@@ -3,25 +3,21 @@ from pyrogram.types import (
     InlineKeyboardMarkup, 
     InlineKeyboardButton,
     ChatJoinRequest,
-    Message,
-    ChatPrivileges
+    Message
 )
 from pyrogram.errors import (
-    UserNotParticipant, 
-    ChatAdminRequired, 
     FloodWait, 
-    InputUserDeactivated, 
     UserIsBlocked, 
-    PeerIdInvalid, 
-    ChatWriteForbidden
+    PeerIdInvalid
 )
-from pyrogram.enums import ChatType, ChatMemberStatus
+from pyrogram.enums import ChatType
 import asyncio
 import random
-import json
 from datetime import datetime
 import os
 import logging
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, PyMongoError
 
 # Configure logging
 logging.basicConfig(
@@ -33,104 +29,152 @@ logger = logging.getLogger(__name__)
 # Initialize bot with your credentials
 app = Client(
     "auto_approver_bot",
+    mongo_uri = os.environ.get("MONGO_URI")
     api_id=os.environ.get("TELEGRAM_API_ID"),
     api_hash=os.environ.get("TELEGRAM_API_HASH"),
     bot_token=os.environ.get("TELEGRAM_BOT_TOKEN")
 )
 
 class Database:
-    def __init__(self, 
-                 users_path='users_database.json', 
-                 channels_path='channels_database.json', 
-                 groups_path='groups_database.json'):
-        self.users_path = users_path
-        self.channels_path = channels_path
-        self.groups_path = groups_path
+    def __init__(self, mongo_uri):
+        """
+        Initialize MongoDB database connection
         
-        # Initialize data dictionaries
-        self.users = {}
-        self.channels = {}
-        self.groups = {}
-        
-        # Load existing data
-        self.load_data()
-    
-    def load_data(self):
-        # Load users data
+        :param mongo_uri: MongoDB connection string
+        """
         try:
-            if os.path.exists(self.users_path):
-                with open(self.users_path, 'r') as f:
-                    self.users = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.users = {}
-            self.save_users_data()
-        
-        # Load channels data
-        try:
-            if os.path.exists(self.channels_path):
-                with open(self.channels_path, 'r') as f:
-                    self.channels = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.channels = {}
-            self.save_channels_data()
-        
-        # Load groups data
-        try:
-            if os.path.exists(self.groups_path):
-                with open(self.groups_path, 'r') as f:
-                    self.groups = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.groups = {}
-            self.save_groups_data()
-    
-    def save_users_data(self):
-        with open(self.users_path, 'w') as f:
-            json.dump(self.users, f, indent=4)
-    
-    def save_channels_data(self):
-        with open(self.channels_path, 'w') as f:
-            json.dump(self.channels, f, indent=4)
-    
-    def save_groups_data(self):
-        with open(self.groups_path, 'w') as f:
-            json.dump(self.groups, f, indent=4)
-    
-    def add_user(self, user_id: int, username: str):
-        """Add a new user or update existing user"""
-        user_str_id = str(user_id)
-        
-        # Store only user_id and username
-        self.users[user_str_id] = username
-        self.save_users_data()
-    
-    def add_channel(self, user_id: int, channel_name: str, chat_id: int):
-        """Add a channel to channels database"""
-        channel_str_id = str(chat_id)
-        
-        if channel_str_id not in self.channels:
-            self.channels[channel_str_id] = {
-                'name': channel_name,
-                'added_date': str(datetime.now())
-            }
-        
-        self.save_channels_data()
-        
-    def add_group(self, user_id: int, group_name: str, group_id: int):
-        """Add a group to groups database"""
-        group_str_id = str(group_id)
-        
-        if group_str_id not in self.groups:
-            # Only add the user who added the bot to the 'members' list
-            self.groups[group_str_id] = {
-                'name': group_name,
-                'added_date': str(datetime.now()),
-                'added_by': str(user_id)
-            }
-        
-        self.save_groups_data()
+            # Configure logging
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            self.logger = logging.getLogger(__name__)
 
-# Initialize database
-db = Database()
+            # Connect to MongoDB
+            self.client = MongoClient(mongo_uri)
+            
+            # Select the database
+            self.db = self.client.ApproveBot
+
+            # Define collections
+            self.users_collection = self.db.users
+            self.channels_collection = self.db.channels
+            self.groups_collection = self.db.groups
+
+            # Test connection
+            self.client.admin.command('ping')
+            self.logger.info("Successfully connected to MongoDB")
+
+        except ConnectionFailure:
+            self.logger.error("Failed to connect to MongoDB. Check your connection string.")
+            raise
+        except Exception as e:
+            self.logger.error(f"An error occurred while setting up MongoDB: {e}")
+            raise
+
+    def add_user(self, user_id: int, username: str):
+        """
+        Add a new user or update existing user in the database
+        
+        :param user_id: Telegram user ID
+        :param username: Telegram username
+        """
+        try:
+            # Upsert operation: insert if not exists, update if exists
+            self.users_collection.update_one(
+                {'user_id': user_id},
+                {'$set': {
+                    'username': username,
+                    'last_seen': datetime.now()
+                }},
+                upsert=True
+            )
+            self.logger.info(f"User {user_id} added/updated successfully")
+        except PyMongoError as e:
+            self.logger.error(f"Error adding user {user_id}: {e}")
+
+    def add_channel(self, user_id: int, channel_name: str, chat_id: int):
+        """
+        Add a channel to the database
+        
+        :param user_id: ID of user who added the channel
+        :param channel_name: Name of the channel
+        :param chat_id: Telegram chat ID of the channel
+        """
+        try:
+            # Upsert operation for channels
+            self.channels_collection.update_one(
+                {'chat_id': chat_id},
+                {'$set': {
+                    'name': channel_name,
+                    'added_by': user_id,
+                    'added_date': datetime.now()
+                }},
+                upsert=True
+            )
+            self.logger.info(f"Channel {channel_name} added successfully")
+        except PyMongoError as e:
+            self.logger.error(f"Error adding channel {channel_name}: {e}")
+
+    def add_group(self, user_id: int, group_name: str, group_id: int):
+        """
+        Add a group to the database
+        
+        :param user_id: ID of user who added the group
+        :param group_name: Name of the group
+        :param group_id: Telegram chat ID of the group
+        """
+        try:
+            # Upsert operation for groups
+            self.groups_collection.update_one(
+                {'chat_id': group_id},
+                {'$set': {
+                    'name': group_name,
+                    'added_by': user_id,
+                    'added_date': datetime.now()
+                }},
+                upsert=True
+            )
+            self.logger.info(f"Group {group_name} added successfully")
+        except PyMongoError as e:
+            self.logger.error(f"Error adding group {group_name}: {e}")
+
+    def get_all_users(self):
+        """
+        Retrieve all users from the database
+        
+        :return: List of user IDs
+        """
+        try:
+            users = list(self.users_collection.find({}, {'user_id': 1}))
+            return [user['user_id'] for user in users]
+        except PyMongoError as e:
+            self.logger.error(f"Error retrieving users: {e}")
+            return []
+
+    def get_all_groups(self):
+        """
+        Retrieve all group chat IDs from the database
+        
+        :return: List of group chat IDs
+        """
+        try:
+            groups = list(self.groups_collection.find({}, {'chat_id': 1}))
+            return [group['chat_id'] for group in groups]
+        except PyMongoError as e:
+            self.logger.error(f"Error retrieving groups: {e}")
+            return []
+
+    def __del__(self):
+        """
+        Close MongoDB connection when object is deleted
+        """
+        if hasattr(self, 'client'):
+            self.client.close()
+            self.logger.info("MongoDB connection closed")
+
+# Replace the old database initialization
+db = Database(os.environ.get("MONGO_URI"))
 
 # Keyboard Generators
 def get_welcome_keyboard():
@@ -287,7 +331,7 @@ async def broadcast_message(client, message: Message):
             return
 
         # Get the list of unique user IDs from the users database
-        user_ids = list(map(int, db.users.keys()))
+        user_ids = db.get_all_users()
         
         # Randomize the order to avoid potential rate limits
         random.shuffle(user_ids)
@@ -438,8 +482,8 @@ async def broadcast_to_groups(client, message: Message):
             await message.reply_text("Please reply to a message or send a message to broadcast to groups.")
             return
 
-        # Get the list of unique group IDs from the groups database
-        group_ids = list(map(int, db.groups.keys()))
+        # New code
+        group_ids = db.get_all_groups()
         
         # Randomize the order to avoid potential rate limits
         random.shuffle(group_ids)

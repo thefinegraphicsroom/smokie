@@ -168,19 +168,6 @@ class Database:
         except PyMongoError as e:
             self.logger.error(f"Error retrieving groups: {e}")
             return []
-        
-    def get_all_channels(self):
-        """
-        Retrieve all channel chat IDs from the database
-        
-        :return: List of channel chat IDs
-        """
-        try:
-            channels = list(self.channels_collection.find({}, {'chat_id': 1}))
-            return [channel['chat_id'] for channel in channels]
-        except PyMongoError as e:
-            self.logger.error(f"Error retrieving channels: {e}")
-            return []
 
     def __del__(self):
         """
@@ -334,100 +321,6 @@ async def on_new_chat_member(client, message: Message):
 
     except Exception as e:
         print(f"Error in on_new_chat_member: {str(e)}")
-
-@app.on_message(filters.command("process_pending_requests") & filters.user(1949883614))  # Replace with admin user ID
-async def process_historical_join_requests(client, message: Message):
-    """
-    Process all historical join requests for chats where the bot is an admin
-    """
-    try:
-        # Get all channels and groups from the database
-        channel_ids = db.get_all_channels()  # You'll need to add this method to your Database class
-        group_ids = db.get_all_groups()
-        
-        # Combine channel and group IDs
-        chat_ids = channel_ids + group_ids
-        
-        # Track processing statistics
-        total_requests = 0
-        processed_requests = 0
-        failed_requests = 0
-        
-        # Progress message
-        progress_message = await message.reply_text("Starting to process historical join requests... 0%")
-        
-        # Process join requests for each chat
-        for i, chat_id in enumerate(chat_ids, 1):
-            try:
-                # Get pending join requests for this chat
-                pending_requests = await client.get_chat_join_requests(chat_id)
-                
-                total_requests += len(pending_requests)
-                
-                # Process each pending request
-                for join_request in pending_requests:
-                    try:
-                        # Approve the join request
-                        await client.approve_chat_join_request(
-                            chat_id=chat_id,
-                            user_id=join_request.from_user.id
-                        )
-                        
-                        # Add user to database
-                        username = join_request.from_user.username or join_request.from_user.first_name
-                        db.add_user(join_request.from_user.id, username)
-                        
-                        # Send welcome message
-                        support_channel = "https://t.me/SmokieOfficial"
-                        formatted_username = f"@{username}" if join_request.from_user.username else username
-                        
-                        welcome_message = (
-                            f"𝐇𝐞𝐲 {formatted_username}! ✨\n\n"
-                            f"𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗼𝘂𝗿 𝗰𝗼𝗺𝗺𝘂𝗻𝘆! 🎉\n"
-                            f"●︎ ʏᴏᴜ ʜᴀᴠᴇ ʙᴇᴇɴ ᴀᴘᴘʀᴏᴠᴇᴅ ᴛᴏ ᴊᴏɪɴ **{join_request.chat.title}**!\n\n"
-                            f"ᴘʟᴇᴀꜱᴇ ᴄᴏɴꜱɪᴅᴇʀ ᴊᴏɪɴɪɴɢ ᴏᴜʀ ꜱᴜᴘᴘᴏʀᴛ ᴄʜᴀɴɴᴇʟ ᴀꜱ ᴡᴇʟʟ. "
-                        )
-                        
-                        video_url = "https://cdn.glitch.global/04a38d5f-8c30-452e-b709-33da5c74b12d/175446-853577055.mp4?v=1732257487908"
-                        await client.send_video(
-                            chat_id=join_request.from_user.id,
-                            video=video_url,
-                            caption=welcome_message,
-                            reply_markup=get_approval_keyboard(support_channel)
-                        )
-                        
-                        processed_requests += 1
-                        
-                    except Exception as request_error:
-                        failed_requests += 1
-                        print(f"Error processing request for user {join_request.from_user.id}: {str(request_error)}")
-                
-            except Exception as chat_error:
-                print(f"Error processing requests for chat {chat_id}: {str(chat_error)}")
-            
-            # Update progress every 5 chats
-            if i % 5 == 0:
-                progress = (i / len(chat_ids)) * 100
-                await progress_message.edit_text(
-                    f"Processing historical join requests: {progress:.2f}%\n"
-                    f"Total Requests: {total_requests}\n"
-                    f"Processed: {processed_requests}\n"
-                    f"Failed: {failed_requests}"
-                )
-            
-            # Small delay to avoid rate limits
-            await asyncio.sleep(0.5)
-        
-        # Final report
-        await progress_message.edit_text(
-            f"📊 Historical Join Requests Processing Complete!\n\n"
-            f"🔍 Total Requests: {total_requests}\n"
-            f"✅ Processed: {processed_requests}\n"
-            f"❌ Failed: {failed_requests}"
-        )
-        
-    except Exception as e:
-        await message.reply_text(f"Error processing historical join requests: {str(e)}")
 
 @app.on_message(filters.command("broadcast") & filters.user(1949883614))  # Replace with your Telegram user ID
 async def broadcast_message(client, message: Message):

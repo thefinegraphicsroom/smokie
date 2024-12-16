@@ -1,8 +1,8 @@
 import requests
 import base64
 
-TOKEN = "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"
-REPO = "Shrapxp/travis"
+TOKEN = "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"
+REPO = "thefinegraphicsroom/smokie"
 FILE_PATH = ".travis.yml"
 BRANCH = "main"
 
